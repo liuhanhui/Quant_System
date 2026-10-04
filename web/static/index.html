@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>研究看板</title>
+  <link rel="stylesheet" href="/static/style.css?v=20261004b" />
+  <script src="/static/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div>
+        <p class="eyebrow">QUANT DESK</p>
+        <h1>研究看板</h1>
+      </div>
+      <div class="top-meta">
+        <span class="pill">研究用途 · 非实盘</span>
+        <span id="runStatus" class="status idle" hidden>待回测</span>
+        <span id="quoteStatus" class="status idle" hidden>输入名称或代码</span>
+        <span id="usStatus" class="status idle">正在加载 AAPL</span>
+        <span id="hkStatus" class="status idle" hidden>输入港股代码</span>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab" data-tab="backtest" role="tab">回测</button>
+      <button type="button" class="tab" data-tab="quotes" role="tab">A股</button>
+      <button type="button" class="tab active" data-tab="us" role="tab">美股</button>
+      <button type="button" class="tab" data-tab="hk" role="tab">港股</button>
+    </nav>
+
+    <div id="view-backtest" class="view" hidden>
+      <aside class="panel">
+        <h2>回测设置</h2>
+        <label>策略
+          <select id="strategy"></select>
+        </label>
+        <p id="strategyDesc" class="hint"></p>
+        <div id="paramFields"></div>
+        <label>数据来源
+          <select id="source">
+            <option value="synthetic">合成行情（演示）</option>
+            <option value="tushare">Tushare Pro</option>
+          </select>
+        </label>
+        <p id="sourceHint" class="hint"></p>
+        <label>标的代码
+          <input id="symbol" type="text" value="SIM000001" />
+        </label>
+        <label>初始资金
+          <input id="cash" type="number" value="1000000" min="10000" step="10000" />
+        </label>
+        <div id="syntheticFields">
+          <label>合成数据天数
+            <input id="days" type="number" value="5" min="1" max="20" />
+          </label>
+        </div>
+        <div id="tushareFields" hidden>
+          <label>开始日期
+            <input id="start" type="date" />
+          </label>
+          <label>结束日期
+            <input id="end" type="date" />
+          </label>
+          <label>周期
+            <select id="freq">
+              <option value="1min" selected>1 分钟</option>
+              <option value="D">日线</option>
+              <option value="5min">5 分钟</option>
+              <option value="15min">15 分钟</option>
+              <option value="30min">30 分钟</option>
+              <option value="60min">60 分钟</option>
+            </select>
+          </label>
+          <label>Token（可留空，默认读 .env）
+            <input id="token" type="password" autocomplete="off" placeholder="TUSHARE_TOKEN" />
+          </label>
+        </div>
+        <label>滑点
+          <input id="slippage" type="number" value="0.0002" min="0" step="0.0001" />
+        </label>
+        <label>Tick CSV（可选，上传则覆盖上面来源）
+          <input id="file" type="file" accept=".csv" />
+        </label>
+        <p class="hint">CSV 列：datetime, symbol, price, volume</p>
+        <button id="runBtn" type="button">开始回测</button>
+      </aside>
+
+      <main class="board">
+        <section id="kpis" class="kpis"></section>
+        <section class="charts">
+          <article class="card">
+            <h3>净值曲线</h3>
+            <div class="chart-box">
+              <canvas id="equityChart"></canvas>
+            </div>
+          </article>
+          <article class="card">
+            <h3>回撤</h3>
+            <div class="chart-box">
+              <canvas id="ddChart"></canvas>
+            </div>
+          </article>
+        </section>
+        <section class="card table-card">
+          <div class="table-head">
+            <h3>成交明细</h3>
+            <span id="fillCount" class="hint">0 笔</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>方向</th>
+                  <th>数量</th>
+                  <th>成交价</th>
+                  <th>费用</th>
+                </tr>
+              </thead>
+              <tbody id="fillsBody">
+                <tr><td colspan="5" class="empty">跑完回测后显示买卖成交</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="view-quotes" class="view" hidden>
+      <aside class="panel">
+        <h2>查任意公司</h2>
+        <label>名称或代码
+          <input id="quoteQuery" type="text" placeholder="寒武纪 / 688256" autocomplete="off" />
+        </label>
+        <div class="btn-row">
+          <button id="searchBtn" type="button">搜索</button>
+        </div>
+        <div class="chips" id="quoteChips">
+          <button type="button" class="chip" data-q="寒武纪">寒武纪</button>
+          <button type="button" class="chip" data-q="贵州茅台">茅台</button>
+          <button type="button" class="chip" data-q="宁德时代">宁德时代</button>
+          <button type="button" class="chip" data-q="000001">平安银行</button>
+        </div>
+        <ul id="stockHits" class="hits">
+          <li class="empty-hit">输入名称或 6 位代码，点搜索</li>
+        </ul>
+        <p id="quotePicked" class="hint">尚未选择标的</p>
+        <label>开始日期
+          <input id="quoteStart" type="date" />
+        </label>
+        <label>结束日期
+          <input id="quoteEnd" type="date" />
+        </label>
+        <p class="hint">默认近一年日 K，Tushare 未复权。搜过的区间会进本地缓存。</p>
+        <button id="quoteBtn" type="button">加载行情</button>
+      </aside>
+
+      <main class="board">
+        <section id="quoteKpis" class="kpis">
+          <article class="kpi"><div class="lab">请先搜索公司</div><div class="val">—</div></article>
+        </section>
+        <section class="card">
+          <div class="table-head">
+            <h3 id="klineTitle">日 K</h3>
+            <span id="klineNote" class="hint"></span>
+          </div>
+          <div class="chart-box kline-box">
+            <canvas id="klineCanvas"></canvas>
+          </div>
+        </section>
+        <section class="card table-card">
+          <div class="table-head">
+            <h3>日交易明细</h3>
+            <span id="barCount" class="hint">0 根</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>开</th>
+                  <th>高</th>
+                  <th>低</th>
+                  <th>收</th>
+                  <th>涨跌%</th>
+                  <th>成交量(手)</th>
+                  <th>成交额(千元)</th>
+                </tr>
+              </thead>
+              <tbody id="barsBody">
+                <tr><td colspan="8" class="empty">选择公司后显示每日 OHLC</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="view-us" class="view">
+      <aside class="panel">
+        <h2>美股行情</h2>
+        <label>名称或代码
+          <input id="usQuery" type="text" placeholder="Apple / AAPL" autocomplete="off" />
+        </label>
+        <div class="btn-row">
+          <button id="usSearchBtn" type="button">搜索</button>
+        </div>
+        <div class="chips" id="usChips">
+          <button type="button" class="chip" data-q="AAPL">AAPL</button>
+          <button type="button" class="chip" data-q="TSLA">TSLA</button>
+          <button type="button" class="chip" data-q="NVDA">NVDA</button>
+          <button type="button" class="chip" data-q="MSFT">MSFT</button>
+          <button type="button" class="chip" data-q="AMZN">AMZN</button>
+        </div>
+        <ul id="usHits" class="hits">
+          <li class="empty-hit">输入英文名或代码，点搜索</li>
+        </ul>
+        <p id="usPicked" class="hint">尚未选择标的</p>
+        <label>开始日期
+          <input id="usStart" type="date" />
+        </label>
+        <label>结束日期
+          <input id="usEnd" type="date" />
+        </label>
+        <p class="hint">打开本页会自动加载 AAPL。也可搜代码或中文名（苹果 / TSLA）。没权限时用本地缓存或 Yahoo / Stooq。</p>
+        <button id="usBtn" type="button">加载行情</button>
+      </aside>
+
+      <main class="board">
+        <section id="usKpis" class="kpis">
+          <article class="kpi"><div class="lab">请先搜索公司</div><div class="val">—</div></article>
+        </section>
+        <section class="card">
+          <div class="table-head">
+            <h3 id="usKlineTitle">日 K</h3>
+            <span id="usKlineNote" class="hint"></span>
+          </div>
+          <div class="chart-box">
+            <canvas id="usCloseChart"></canvas>
+          </div>
+          <div class="chart-box kline-box">
+            <canvas id="usKlineCanvas"></canvas>
+          </div>
+        </section>
+        <section class="card table-card">
+          <div class="table-head">
+            <h3>日交易明细</h3>
+            <span id="usBarCount" class="hint">0 根</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>开</th>
+                  <th>高</th>
+                  <th>低</th>
+                  <th>收</th>
+                  <th>涨跌%</th>
+                  <th>成交量(股)</th>
+                  <th>成交额</th>
+                </tr>
+              </thead>
+              <tbody id="usBarsBody">
+                <tr><td colspan="8" class="empty">选择公司后显示每日 OHLC</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="view-hk" class="view" hidden>
+      <aside class="panel">
+        <h2>港股行情</h2>
+        <label>名称或代码
+          <input id="hkQuery" type="text" placeholder="腾讯 / 00700" autocomplete="off" />
+        </label>
+        <div class="btn-row">
+          <button id="hkSearchBtn" type="button">搜索</button>
+        </div>
+        <div class="chips" id="hkChips">
+          <button type="button" class="chip" data-q="腾讯">腾讯</button>
+          <button type="button" class="chip" data-q="阿里">阿里</button>
+          <button type="button" class="chip" data-q="美团">美团</button>
+          <button type="button" class="chip" data-q="小米">小米</button>
+          <button type="button" class="chip" data-q="0700">0700</button>
+        </div>
+        <ul id="hkHits" class="hits">
+          <li class="empty-hit">输入名称或 4/5 位代码，点搜索</li>
+        </ul>
+        <p id="hkPicked" class="hint">尚未选择标的</p>
+        <label>开始日期
+          <input id="hkStart" type="date" />
+        </label>
+        <label>结束日期
+          <input id="hkEnd" type="date" />
+        </label>
+        <p class="hint">默认近一年日 K。优先 Tushare 港股日线，没权限则用 Yahoo / Stooq。涨红跌绿，成交量单位为股。</p>
+        <button id="hkBtn" type="button">加载行情</button>
+      </aside>
+
+      <main class="board">
+        <section id="hkKpis" class="kpis">
+          <article class="kpi"><div class="lab">请先搜索公司</div><div class="val">—</div></article>
+        </section>
+        <section class="card">
+          <div class="table-head">
+            <h3 id="hkKlineTitle">日 K</h3>
+            <span id="hkKlineNote" class="hint"></span>
+          </div>
+          <div class="chart-box kline-box">
+            <canvas id="hkKlineCanvas"></canvas>
+          </div>
+        </section>
+        <section class="card table-card">
+          <div class="table-head">
+            <h3>日交易明细</h3>
+            <span id="hkBarCount" class="hint">0 根</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>开</th>
+                  <th>高</th>
+                  <th>低</th>
+                  <th>收</th>
+                  <th>涨跌%</th>
+                  <th>成交量(股)</th>
+                  <th>成交额(港元)</th>
+                </tr>
+              </thead>
+              <tbody id="hkBarsBody">
+                <tr><td colspan="8" class="empty">选择公司后显示每日 OHLC</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script src="/static/app.js?v=20261004c"></script>
+  <script>
+    (function loadUsNow() {
+      var kpis = document.getElementById("usKpis");
+      var note = document.getElementById("usKlineNote");
+      var title = document.getElementById("usKlineTitle");
+      var body = document.getElementById("usBarsBody");
+      var count = document.getElementById("usBarCount");
+      var status = document.getElementById("usStatus");
+      var canvas = document.getElementById("usCloseChart");
+      function showErr(msg) {
+        if (status) { status.className = "status err"; status.textContent = msg; }
+        if (kpis) kpis.innerHTML = '<article class="kpi down"><div class="lab">美股</div><div class="val">' + msg + "</div></article>";
+      }
+      function ymd(d) {
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      }
+      var end = new Date();
+      end.setDate(end.getDate() - 1);
+      var start = new Date(end);
+      start.setFullYear(start.getFullYear() - 1);
+      var url = "/api/us/quotes?symbol=AAPL&start=" + ymd(start) + "&end=" + ymd(end);
+      document.querySelectorAll(".tab").forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-tab") === "us");
+      });
+      ["view-backtest", "view-quotes", "view-us", "view-hk"].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) node.hidden = id !== "view-us";
+      });
+      if (status) { status.hidden = false; status.className = "status busy"; status.textContent = "拉取 AAPL…"; }
+      fetch(url).then(function (rv) { return rv.json().then(function (data) { return { ok: rv.ok, data: data }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.data.error || "拉取失败");
+          var d = res.data;
+          var s = d.stats || {};
+          var chg = Number(s.change_pct || 0);
+          var tone = chg >= 0 ? "us-up" : "us-down";
+          if (title) title.textContent = (d.name || "") + " " + d.ts_code + " 日K";
+          if (note) note.textContent = d.note || "";
+          if (status) { status.className = "status ok"; status.textContent = (d.bars || []).length + " 根 · " + (d.note || ""); }
+          if (kpis) {
+            kpis.innerHTML = [
+              ["公司", d.name],
+              ["代码", d.ts_code],
+              ["区间末收", Number(s.last_close).toFixed(2)],
+              ["区间涨跌", (chg >= 0 ? "+" : "") + (chg * 100).toFixed(2) + "%"],
+              ["最高 / 最低", Number(s.high).toFixed(2) + " / " + Number(s.low).toFixed(2)],
+              ["K 线根数", String(s.bars || 0)]
+            ].map(function (row, i) {
+              var cls = (i === 2 || i === 3) ? tone : "";
+              return '<article class="kpi ' + cls + '"><div class="lab">' + row[0] + '</div><div class="val">' + row[1] + "</div></article>";
+            }).join("");
+          }
+          var bars = d.bars || [];
+          if (count) count.textContent = bars.length + " 根";
+          if (body) {
+            body.innerHTML = bars.slice().reverse().slice(0, 80).map(function (b) {
+              return "<tr><td>" + b.date + "</td><td>" + Number(b.open).toFixed(2) + "</td><td>" + Number(b.high).toFixed(2) + "</td><td>" + Number(b.low).toFixed(2) + "</td><td>" + Number(b.close).toFixed(2) + "</td><td>" + (b.pct_chg == null ? "—" : Number(b.pct_chg).toFixed(2) + "%") + "</td><td>" + Math.round(b.vol).toLocaleString() + "</td><td>—</td></tr>";
+            }).join("");
+          }
+          if (canvas && window.Chart) {
+            new Chart(canvas, {
+              type: "line",
+              data: {
+                labels: bars.map(function (b) { return b.date; }),
+                datasets: [{
+                  data: bars.map(function (b) { return b.close; }),
+                  borderColor: "#3dbe7a",
+                  backgroundColor: "rgba(61,190,122,0.12)",
+                  fill: true,
+                  pointRadius: 0,
+                  borderWidth: 1.6,
+                  tension: 0.15
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { ticks: { maxTicksLimit: 6, color: "#8b9aab" }, grid: { color: "#22303d" } },
+                  y: { ticks: { color: "#8b9aab" }, grid: { color: "#22303d" } }
+                }
+              }
+            });
+          }
+        })
+        .catch(function (err) { showErr(err.message || String(err)); });
+    })();
+  </script>
+</body>
+</html>
