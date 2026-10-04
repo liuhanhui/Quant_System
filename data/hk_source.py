@@ -206,8 +206,11 @@ def _resolve_hk_name(ts_code: str, token: str | None = None, client=None) -> str
 
 
 def _bars_from_ohlc(df: pd.DataFrame) -> list[dict]:
+    work = df.copy()
+    work["trade_date"] = pd.to_datetime(work["trade_date"])
+    work = work.sort_values("trade_date").reset_index(drop=True)
     out = []
-    for _, row in df.iterrows():
+    for _, row in work.iterrows():
         close = row.get("close")
         if close is None or pd.isna(close):
             continue
@@ -215,13 +218,13 @@ def _bars_from_ohlc(df: pd.DataFrame) -> list[dict]:
         prev = out[-1]["close"] if out else None
         pct = None
         for col in ("pct_chg", "pct_change"):
-            if col in df.columns and pd.notna(row.get(col)):
+            if col in work.columns and pd.notna(row.get(col)):
                 pct = float(row[col])
                 break
         if pct is None and prev not in (None, 0):
             pct = (close / prev - 1) * 100
-        vol = row["vol"] if "vol" in df.columns else 0
-        amount = row["amount"] if "amount" in df.columns else 0
+        vol = row["vol"] if "vol" in work.columns else 0
+        amount = row["amount"] if "amount" in work.columns else 0
         out.append({
             "date": pd.Timestamp(row["trade_date"]).strftime("%Y-%m-%d"),
             "open": float(row["open"]),

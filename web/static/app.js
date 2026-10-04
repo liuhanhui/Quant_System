@@ -431,7 +431,10 @@ function drawKline(canvas, bars, colors) {
   if (!canvas || !bars || !bars.length) return;
   const upColor = colors?.up || "#e15b5b";
   const downColor = colors?.down || "#3dbe7a";
-  bars = bars.filter((b) => [b.open, b.high, b.low, b.close].every((x) => Number.isFinite(Number(x))));
+  bars = bars
+    .filter((b) => [b.open, b.high, b.low, b.close].every((x) => Number.isFinite(Number(x))))
+    .slice()
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   if (!bars.length) return;
   const wrap = canvas.parentElement;
   const cssW = wrap.clientWidth || 800;
